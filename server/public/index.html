@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather gRPC Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #060912;
+      --surface: #0d1424;
+      --surface2: #131d33;
+      --border: #1e2d4a;
+      --accent: #3b82f6;
+      --accent2: #06b6d4;
+      --accent3: #f59e0b;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --glow: rgba(59,130,246,0.15);
+    }
+
+    body {
+      font-family: 'DM Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glowing orbs */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px; left: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: drift 20s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift {
+      to { transform: translate(300px, 200px); }
+    }
+
+    /* ── HEADER ── */
+    header {
+      position: relative; z-index: 10;
+      padding: 24px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px; font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 30%, var(--accent2));
+      background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .logo span { color: var(--accent); -webkit-text-fill-color: var(--accent); }
+
+    .user-badge {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 12px; color: var(--muted);
+    }
+
+    .user-badge input {
+      background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'DM Mono', monospace;
+      font-size: 12px; width: 100px;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ── LAYOUT ── */
+    main {
+      position: relative; z-index: 1;
+      max-width: 1300px; margin: 0 auto;
+      padding: 40px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto;
+      gap: 20px;
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .card:hover {
+      border-color: rgba(59,130,246,0.3);
+      box-shadow: 0 0 30px var(--glow);
+    }
+
+    .card.full { grid-column: 1 / -1; }
+    .card.tall { grid-row: span 2; }
+
+    .card-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .tag {
+      font-size: 10px; padding: 2px 8px;
+      border-radius: 100px;
+      font-weight: 600; letter-spacing: 1px;
+    }
+
+    .tag-unary { background: rgba(59,130,246,0.15); color: var(--accent); }
+    .tag-stream { background: rgba(6,182,212,0.15); color: var(--accent2); }
+
+    /* ── INPUTS ── */
+    .input-row {
+      display: flex; gap: 10px; margin-bottom: 16px;
+    }
+
+    input[type="text"], textarea {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 16px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+    }
+
+    textarea { resize: vertical; min-height: 70px; }
+
+    button {
+      padding: 11px 20px;
+      border-radius: 10px;
+      border: none; cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px; font-weight: 700;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-danger {
+      background: rgba(239,68,68,0.1);
+      color: var(--danger);
+      border: 1px solid rgba(239,68,68,0.2);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.2); }
+
+    button:disabled {
+      opacity: 0.5; cursor: not-allowed; transform: none !important;
+    }
+
+    /* ── WEATHER RESULT ── */
+    .weather-big {
+      text-align: center; padding: 10px 0 20px;
+    }
+
+    .weather-city {
+      font-family: 'Syne', sans-serif;
+      font-size: 32px; font-weight: 800;
+      background: linear-gradient(135deg, #fff, var(--accent2));
+      background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .weather-temp {
+      font-size: 64px; font-weight: 300;
+      line-height: 1; margin: 8px 0;
+      color: #fff;
+    }
+
+    .weather-temp sup { font-size: 24px; vertical-align: super; }
+
+    .weather-desc {
+      font-size: 14px; color: var(--muted); text-transform: capitalize;
+      margin-bottom: 20px;
+    }
+
+    .weather-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-top: 16px;
+    }
+
+    .stat-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .stat-value { font-size: 18px; font-weight: 500; margin-top: 4px; }
+
+    /* ── ALERT BADGE ── */
+    .alert-box {
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-top: 16px;
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .alert-box.normal { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); color: var(--success); }
+    .alert-box.warning { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); color: var(--accent3); }
+    .alert-box.critical { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: var(--danger); }
+
+    /* ── MULTI CITY ── */
+    .summary-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+      margin-top: 16px;
+    }
+
+    .summary-stat {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .summary-stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .summary-stat .value { font-size: 20px; font-weight: 600; margin-top: 4px; color: #fff; }
+
+    .city-results {
+      margin-top: 16px;
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 200px; overflow-y: auto;
+    }
+
+    .city-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      animation: slideIn 0.3s ease forwards;
+      opacity: 0;
+    }
+
+    @keyframes slideIn { to { opacity: 1; transform: translateX(0); } from { opacity: 0; transform: translateX(-10px); } }
+
+    .city-row .city-name { font-weight: 600; }
+    .city-row .city-temp { color: var(--accent2); font-size: 15px; }
+    .city-row .extreme-badge {
+      font-size: 10px; padding: 2px 8px;
+      background: rgba(239,68,68,0.15); color: var(--danger);
+      border-radius: 100px;
+    }
+
+    /* ── FAVORITES ── */
+    .fav-list {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+    }
+
+    .fav-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .fav-chip button {
+      padding: 0; background: transparent;
+      color: var(--muted); font-size: 14px;
+      line-height: 1;
+    }
+    .fav-chip button:hover { color: var(--danger); }
+
+    /* ── HISTORY ── */
+    .history-list {
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 280px; overflow-y: auto;
+    }
+
+    .history-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 16px;
+      padding: 12px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 12px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .history-city { font-weight: 600; font-size: 14px; }
+    .history-temp { color: var(--accent2); font-size: 16px; font-weight: 500; }
+    .history-time { color: var(--muted); font-size: 11px; }
+
+    /* ── STREAMING LOG ── */
+    .stream-log {
+      background: #020408;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 11px;
+      line-height: 1.8;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-top: 12px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .log-send { color: var(--accent2); }
+    .log-recv { color: var(--success); }
+    .log-err  { color: var(--danger); }
+
+    /* ── LOADING ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── EMPTY STATE ── */
+    .empty {
+      text-align: center; padding: 30px;
+      color: var(--muted); font-size: 13px;
+    }
+
+    /* ── ERROR ── */
+    .error-msg {
+      color: var(--danger); font-size: 12px;
+      margin-top: 10px; padding: 10px 14px;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.15);
+      border-radius: 8px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── EXTREME WARNING ── */
+    .extreme-warning {
+      display: inline-block; margin-left: 8px;
+      font-size: 11px; padding: 2px 8px;
+      background: rgba(239,68,68,0.15);
+      color: var(--danger); border-radius: 100px;
+    }
+
+    .grpc-label {
+      font-size: 10px; color: var(--accent);
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.15);
+      padding: 2px 8px; border-radius: 4px;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Sky<span>Weather</span> <span style="font-size:13px;font-weight:400;color:var(--muted);-webkit-text-fill-color:var(--muted);">gRPC Weather</span></div>
+  <div class="user-badge">
+    <div class="status-dot"></div>
+    <span style="color:var(--muted)">user:</span>
+    <input type="text" id="globalUserId" value="student_001" placeholder="user_id" />
+  </div>
+</header>
+
+<main>
+
+  <!-- ── SINGLE CITY WEATHER (Unary) ── -->
+  <div class="card">
+    <div class="card-title">
+      Single City Weather
+      <span class="tag tag-unary">UNARY</span>
+      <span class="grpc-label">GetWeather</span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="singleCity" placeholder="e.g. Surabaya" />
+      <button class="btn-primary" onclick="getWeather()" id="btnGetWeather">Search</button>
+    </div>
+    <div id="weatherResult"></div>
+  </div>
+
+  <!-- ── ALERT CHECK (Unary) ── -->
+  <div class="card">
+    <div class="card-title">
+      Weather Alert
+      <span class="tag tag-unary">UNARY</span>
+      <span class="grpc-label">CheckAlert</span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="alertCity" placeholder="e.g. Surabaya" />
+      <button class="btn-primary" onclick="checkAlert()" id="btnAlert">Check</button>
+    </div>
+    <div id="alertResult"></div>
+  </div>
+
+  <!-- ── MULTI CITY STREAMING ── -->
+  <div class="card full">
+    <div class="card-title">
+      Multi-City Weather
+      <span class="tag tag-stream">CLIENT STREAMING</span>
+      <span class="grpc-label">GetMultiCityWeather</span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="multiCities" placeholder="e.g. Jakarta, Bali, Yogyakarta, Medan, Makassar" />
+      <button class="btn-primary" onclick="getMultiCity()" id="btnMulti">Stream</button>
+    </div>
+    <div id="streamLog" class="stream-log" style="display:none"></div>
+    <div id="multiResult"></div>
+  </div>
+
+  <!-- ── FAVORITES ── -->
+  <div class="card">
+    <div class="card-title">
+      Favorites
+      <span class="tag tag-unary">UNARY</span>
+      <span class="grpc-label">FavoriteService</span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="favCity" placeholder="Add city to favorites..." />
+      <button class="btn-primary" onclick="addFavorite()">Add</button>
+    </div>
+    <div id="favResult"></div>
+    <div id="favList" class="fav-list"></div>
+  </div>
+
+  <!-- ── HISTORY ── -->
+  <div class="card">
+    <div class="card-title">
+      Search History
+      <span class="tag tag-unary">UNARY</span>
+      <span class="grpc-label">GetHistory</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <button class="btn-secondary" style="flex:1" onclick="loadHistory()">🔄 Refresh History</button>
+    </div>
+    <div id="historyList" class="history-list">
+      <div class="empty">Search for cities to build history</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const API = '';
+
+  function userId() {
+    return document.getElementById('globalUserId').value.trim() || 'web_user';
+  }
+
+  function setLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.innerHTML = loading ? '<span class="spinner"></span>' : btn.dataset.label || btn.innerHTML;
+    if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+  }
+
+  function showError(containerId, msg) {
+    document.getElementById(containerId).innerHTML =
+      `<div class="error-msg">⚠ ${msg}</div>`;
+  }
+
+  function tempColor(t) {
+    if (t >= 35) return '#f87171';
+    if (t >= 28) return '#fbbf24';
+    if (t >= 20) return '#34d399';
+    return '#60a5fa';
+  }
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  }
+
+
+  async function getWeather() {
+    const city = document.getElementById('singleCity').value.trim();
+    if (!city) return;
+    setLoading('btnGetWeather', true);
+    document.getElementById('weatherResult').innerHTML = '<div class="empty"><span class="spinner"></span> Fetching...</div>';
+
+    try {
+      const res = await fetch(`${API}/api/weather/${encodeURIComponent(city)}?user_id=${userId()}`);
+      const data = await res.json();
+      if (!res.ok) return showError('weatherResult', data.error);
+
+      const extreme = data.is_extreme ? `<span class="extreme-warning">⚠ EXTREME</span>` : '';
+      document.getElementById('weatherResult').innerHTML = `
+        <div class="weather-big">
+          <div class="weather-city">${data.city}, ${data.country} ${extreme}</div>
+          <div class="weather-temp" style="color:${tempColor(data.temperature)}">${data.temperature.toFixed(1)}<sup>°C</sup></div>
+          <div class="weather-desc">${data.description}</div>
+          <div class="weather-stats">
+            <div class="stat-box">
+              <div class="stat-label">Feels Like</div>
+              <div class="stat-value" style="color:${tempColor(data.feels_like)}">${data.feels_like.toFixed(1)}°</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Humidity</div>
+              <div class="stat-value">${data.humidity}%</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Wind</div>
+              <div class="stat-value">${data.wind_speed} m/s</div>
+            </div>
+          </div>
+        </div>`;
+
+      document.getElementById('alertCity').value = city;
+      loadHistory();
+    } catch (e) {
+      showError('weatherResult', 'Cannot connect to server.');
+    } finally {
+      setLoading('btnGetWeather', false);
+    }
+  }
+
+  // ── 2. Alert ─────────────────────────────────────────
+
+  async function checkAlert() {
+    const city = document.getElementById('alertCity').value.trim();
+    if (!city) return;
+    setLoading('btnAlert', true);
+    document.getElementById('alertResult').innerHTML = '<div class="empty"><span class="spinner"></span></div>';
+
+    try {
+      const res = await fetch(`${API}/api/alert/${encodeURIComponent(city)}`);
+      const data = await res.json();
+      if (!res.ok) return showError('alertResult', data.error);
+
+      const cls = data.has_alert ? (data.severity === 'CRITICAL' ? 'critical' : 'warning') : 'normal';
+      const icons = { STORM:'⛈️', HEAT:'🌡️', COLD:'🥶', WIND:'💨', HUMIDITY:'💧', NONE:'✅' };
+      document.getElementById('alertResult').innerHTML = `
+        <div class="alert-box ${cls}">
+          <span style="font-size:20px">${icons[data.alert_type] || '🔔'}</span>
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">${data.alert_type} — ${data.severity}</div>
+            <div style="font-size:12px;opacity:0.8">${data.message}</div>
+          </div>
+        </div>`;
+    } catch (e) {
+      showError('alertResult', 'Cannot connect to server.');
+    } finally {
+      setLoading('btnAlert', false);
+    }
+  }
+
+  // ── 3. Multi-City Streaming ───────────────────────────
+
+  async function getMultiCity() {
+    const raw = document.getElementById('multiCities').value.trim();
+    if (!raw) return;
+    const cities = raw.split(',').map(c => c.trim()).filter(Boolean);
+    if (cities.length < 2) return;
+
+    setLoading('btnMulti', true);
+    document.getElementById('multiResult').innerHTML = '';
+    const log = document.getElementById('streamLog');
+    log.style.display = 'block';
+    log.innerHTML = `<span style="color:var(--muted)">// Client-side Streaming started</span>\n`;
+
+    // Animate sending
+    for (let i = 0; i < cities.length; i++) {
+      await new Promise(r => setTimeout(r, 250));
+      log.innerHTML += `<span class="log-send">→ write({ city: "${cities[i]}" })</span>\n`;
+      log.scrollTop = log.scrollHeight;
+    }
+    await new Promise(r => setTimeout(r, 200));
+    log.innerHTML += `<span class="log-send">→ call.end()</span>\n`;
+
+    try {
+      const res = await fetch(`${API}/api/weather/multi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cities }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        log.innerHTML += `<span class="log-err">✗ Error: ${data.error}</span>\n`;
+        return showError('multiResult', data.error);
+      }
+
+      log.innerHTML += `<span class="log-recv">← MultiCitySummary received (${data.total_cities} cities)</span>\n`;
+      log.scrollTop = log.scrollHeight;
+
+      const extremeList = data.extreme_cities?.length ? data.extreme_cities.join(', ') : 'None';
+      document.getElementById('multiResult').innerHTML = `
+        <div class="summary-grid">
+          <div class="summary-stat">
+            <div class="label">Total Cities</div>
+            <div class="value">${data.total_cities}</div>
+          </div>
+          <div class="summary-stat">
+            <div class="label">Avg Temperature</div>
+            <div class="value" style="color:${tempColor(data.avg_temperature)}">${data.avg_temperature}°C</div>
+          </div>
+          <div class="summary-stat">
+            <div class="label">🔥 Hottest</div>
+            <div class="value">${data.hottest_city}</div>
+          </div>
+          <div class="summary-stat">
+            <div class="label">🧊 Coldest</div>
+            <div class="value">${data.coldest_city}</div>
+          </div>
+        </div>
+        ${data.extreme_cities?.length ? `<div class="alert-box warning" style="margin-top:12px">⚠️ Extreme weather: <strong>${extremeList}</strong></div>` : ''}
+        <div class="city-results">
+          ${data.results.map((r, i) => `
+            <div class="city-row" style="animation-delay:${i * 60}ms">
+              <span class="city-name">${r.city}, ${r.country}</span>
+              <span class="city-temp">${r.temperature.toFixed(1)}°C</span>
+              ${r.is_extreme ? '<span class="extreme-badge">EXTREME</span>' : '<span style="font-size:11px;color:var(--muted)">normal</span>'}
+            </div>`).join('')}
+        </div>`;
+    } catch (e) {
+      showError('multiResult', 'Cannot connect to server.');
+    } finally {
+      setLoading('btnMulti', false);
+    }
+  }
+
+  // ── 4. Favorites ─────────────────────────────────────
+
+  async function loadFavorites() {
+    try {
+      const res = await fetch(`${API}/api/favorites/${userId()}`);
+      const data = await res.json();
+      const list = document.getElementById('favList');
+      if (!data.cities?.length) {
+        list.innerHTML = '<div class="empty">No favorites yet</div>';
+        return;
+      }
+      list.innerHTML = data.cities.map(city => `
+        <div class="fav-chip">
+          <span>⭐ ${city}</span>
+          <button onclick="removeFavorite('${city}')" title="Remove">×</button>
+        </div>`).join('');
+    } catch (e) {}
+  }
+
+  async function addFavorite() {
+    const city = document.getElementById('favCity').value.trim();
+    if (!city) return;
+    try {
+      const res = await fetch(`${API}/api/favorites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId(), city }),
+      });
+      const data = await res.json();
+      document.getElementById('favResult').innerHTML =
+        `<div style="font-size:12px;color:${data.success ? 'var(--success)' : 'var(--accent3)'}; margin-bottom:8px">
+          ${data.message}
+        </div>`;
+      document.getElementById('favCity').value = '';
+      loadFavorites();
+    } catch (e) {}
+  }
+
+  async function removeFavorite(city) {
+    try {
+      await fetch(`${API}/api/favorites`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId(), city }),
+      });
+      loadFavorites();
+    } catch (e) {}
+  }
+
+  // ── 5. History ───────────────────────────────────────
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`${API}/api/history/${userId()}`);
+      const data = await res.json();
+      const el = document.getElementById('historyList');
+      if (!data.records?.length) {
+        el.innerHTML = '<div class="empty">No history yet — search for a city!</div>';
+        return;
+      }
+      el.innerHTML = data.records.map(r => `
+        <div class="history-row">
+          <span class="history-city">${r.city}, ${r.country}</span>
+          <span class="history-temp">${r.temperature.toFixed(1)}°C</span>
+          <span class="history-time">${formatTime(r.timestamp)}</span>
+        </div>`).join('');
+    } catch (e) {}
+  }
+
+  // ── Enter key support ─────────────────────────────────
+  document.getElementById('singleCity').addEventListener('keydown', e => e.key === 'Enter' && getWeather());
+  document.getElementById('alertCity').addEventListener('keydown', e => e.key === 'Enter' && checkAlert());
+  document.getElementById('multiCities').addEventListener('keydown', e => e.key === 'Enter' && getMultiCity());
+  document.getElementById('favCity').addEventListener('keydown', e => e.key === 'Enter' && addFavorite());
+
+  // Reload favorites & history when user changes
+  document.getElementById('globalUserId').addEventListener('change', () => {
+    loadFavorites();
+    loadHistory();
+  });
+
+  // Init
+  loadFavorites();
+  loadHistory();
+</script>
+</body>
+</html>

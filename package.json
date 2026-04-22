@@ -1,0 +1,18 @@
+{
+  "name": "weather-grpc-system",
+  "version": "1.0.0",
+  "description": "Weather Monitoring System using gRPC - Client-side Streaming demo",
+  "main": "server/index.js",
+  "scripts": {
+    "server": "node server/index.js",
+    "web": "node server/web.js",
+    "client": "node client/client.js",
+    "multi": "node client/multi-client.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.10",
+    "axios": "^1.6.0",
+    "express": "^4.18.0"
+  }
+}

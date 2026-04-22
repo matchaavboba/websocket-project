@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package weather;
+
+message CityRequest {
+  string city = 1;
+  string user_id = 2;
+}
+
+message WeatherResponse {
+  string city = 1;
+  string country = 2;
+  double temperature = 3;
+  double feels_like = 4;
+  int32 humidity = 5;
+  double wind_speed = 6;
+  string description = 7;
+  string icon = 8;
+  bool is_extreme = 9;
+  string timestamp = 10;
+}
+
+message MultiCityRequest {
+  string city = 1;
+}
+
+message MultiCitySummary {
+  repeated WeatherResponse results = 1;
+  int32 total_cities = 2;
+  double avg_temperature = 3;
+  string hottest_city = 4;
+  string coldest_city = 5;
+  repeated string extreme_cities = 6;
+}
+
+message AlertRequest {
+  string city = 1;
+}
+
+message AlertResponse {
+  string city = 1;
+  bool has_alert = 2;
+  string alert_type = 3;
+  string message = 4;
+  string severity = 5;
+}
+
+message FavoriteRequest {
+  string user_id = 1;
+  string city = 2;
+}
+
+message FavoriteListRequest {
+  string user_id = 1;
+}
+
+message FavoriteListResponse {
+  string user_id = 1;
+  repeated string cities = 2;
+}
+
+message FavoriteResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string cities = 3;
+}
+
+message HistoryRequest {
+  string user_id = 1;
+}
+
+message HistoryResponse {
+  string user_id = 1;
+  repeated WeatherResponse records = 2;
+}
+
+message Empty {}
+
+service WeatherService {
+  rpc GetWeather(CityRequest) returns (WeatherResponse);
+  rpc GetMultiCityWeather(stream MultiCityRequest) returns (MultiCitySummary);
+}
+
+service AlertService {
+  rpc CheckAlert(AlertRequest) returns (AlertResponse);
+}
+
+service FavoriteService {
+  rpc AddFavorite(FavoriteRequest) returns (FavoriteResponse);
+
+  rpc RemoveFavorite(FavoriteRequest) returns (FavoriteResponse);
+
+  rpc GetFavorites(FavoriteListRequest) returns (FavoriteListResponse);
+
+  rpc GetHistory(HistoryRequest) returns (HistoryResponse);
+}
