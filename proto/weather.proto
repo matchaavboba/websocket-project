@@ -79,6 +79,7 @@ message Empty {}
 service WeatherService {
   rpc GetWeather(CityRequest) returns (WeatherResponse);
   rpc GetMultiCityWeather(stream MultiCityRequest) returns (MultiCitySummary);
+  rpc WatchCityWeather(CityRequest) returns (stream WeatherResponse);
 }
 
 service AlertService {

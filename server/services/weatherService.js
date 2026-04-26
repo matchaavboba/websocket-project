@@ -31,6 +31,7 @@ async function fetchWeatherFromAPI(city) {
   };
 }
 
+// ── Unary RPC: GetWeather ─────────────────────────────────────────────────────
 async function GetWeather(call, callback) {
   const { city, user_id } = call.request;
 
@@ -51,11 +52,8 @@ async function GetWeather(call, callback) {
   try {
     console.log(`[WeatherService] Fetching weather for "${city}"...`);
     const weather = await fetchWeatherFromAPI(city);
-
     setCache(city, weather);
-
     if (user_id) addHistory(user_id, weather);
-
     callback(null, weather);
   } catch (err) {
     if (err.response?.status === 404) {
@@ -78,7 +76,10 @@ async function GetWeather(call, callback) {
   }
 }
 
-function GetMultiCityWeather(call, callback) {
+// ── Client Streaming RPC: GetMultiCityWeather ─────────────────────────────────
+// onProgress(weather) dipanggil setiap kali satu kota berhasil di-fetch
+// sehingga web.js bisa push stream_progress ke WebSocket client secara realtime
+function GetMultiCityWeather(call, callback, onProgress) {
   const results = [];
   const errors = [];
 
@@ -97,6 +98,11 @@ function GetMultiCityWeather(call, callback) {
       }
       results.push(weather);
       console.log(`[WeatherService][Stream] Received "${city}" → ${weather.temperature}°C`);
+
+      // Push progress ke layer WebSocket jika callback disediakan
+      if (typeof onProgress === 'function') {
+        onProgress(weather);
+      }
     } catch (err) {
       if (err.response?.status === 404) {
         errors.push(`"${city}" not found`);
@@ -139,4 +145,42 @@ function GetMultiCityWeather(call, callback) {
   });
 }
 
-module.exports = { GetWeather, GetMultiCityWeather };
+// ── Server Streaming RPC: WatchCityWeather ────────────────────────────────────
+// Server push data cuaca 1 kota setiap WATCH_INTERVAL_MS detik
+// Browser kirim cmd_stop_watch → web.js panggil call.cancel()
+const WATCH_INTERVAL_MS = 15000; // 15 detik
+
+function WatchCityWeather(call) {
+  const { city, user_id } = call.request;
+  console.log(`[WeatherService][Watch] Started watching "${city}"`);
+
+  async function pushLatest() {
+    try {
+      // Selalu fetch fresh untuk watch mode, supaya data selalu terkini
+      const weather = await fetchWeatherFromAPI(city);
+      setCache(city, weather);
+      if (user_id) addHistory(user_id, weather);
+      call.write(weather);
+      console.log(`[WeatherService][Watch] Pushed "${city}" → ${weather.temperature}°C`);
+    } catch (err) {
+      console.error(`[WeatherService][Watch] Error for "${city}":`, err.message);
+      // Jangan end stream saat error — coba lagi di interval berikutnya
+    }
+  }
+
+  // Push pertama kali langsung tanpa menunggu interval
+  pushLatest();
+
+  const interval = setInterval(pushLatest, WATCH_INTERVAL_MS);
+
+  call.on('cancelled', () => {
+    clearInterval(interval);
+    console.log(`[WeatherService][Watch] Watch for "${city}" stopped`);
+  });
+
+  call.on('error', () => {
+    clearInterval(interval);
+  });
+}
+
+module.exports = { GetWeather, GetMultiCityWeather, WatchCityWeather };

@@ -22,6 +22,7 @@ function main() {
   server.addService(proto.WeatherService.service, {
     GetWeather: weatherHandler.GetWeather,
     GetMultiCityWeather: weatherHandler.GetMultiCityWeather,
+    WatchCityWeather: weatherHandler.WatchCityWeather,
   });
 
   server.addService(proto.AlertService.service, {

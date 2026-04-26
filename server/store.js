@@ -59,6 +59,19 @@ function setCache(city, data) {
   };
 }
 
+function getCacheEntries() {
+  const now = Date.now();
+  return Object.entries(store.cache)
+    .filter(([, entry]) => now <= entry.expiresAt)
+    .map(([city, entry]) => ({
+      city: entry.data.city,
+      country: entry.data.country,
+      temperature: entry.data.temperature,
+      description: entry.data.description,
+      ttl_ms: entry.expiresAt - now,
+    }));
+}
+
 module.exports = {
   getFavorites,
   addFavorite,
@@ -67,4 +80,5 @@ module.exports = {
   addHistory,
   getCached,
   setCache,
+  getCacheEntries,
 };
