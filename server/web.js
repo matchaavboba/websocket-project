@@ -23,7 +23,7 @@ const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: true, longs: String, enums: String, defaults: true, oneofs: true,
 });
 const proto = grpc.loadPackageDefinition(packageDef).weather;
-const GRPC_SERVER = 'localhost:50051';
+const GRPC_SERVER = process.env.GRPC_SERVER || 'localhost:50051';
 
 const weatherClient  = new proto.WeatherService(GRPC_SERVER, grpc.credentials.createInsecure());
 const alertClient    = new proto.AlertService(GRPC_SERVER, grpc.credentials.createInsecure());
@@ -389,7 +389,7 @@ app.get('/api/cache', (req, res) => {
   res.json({ entries: getCacheEntries() });
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`╔══════════════════════════════════════════╗`);
   console.log(`║   🌐 SkyWeather Web + WebSocket Server   ║`);
